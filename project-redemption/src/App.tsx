@@ -3,7 +3,6 @@ import Login from './Login';
 import { api } from './api';
 import './App.css';
 
-// Reconciled strictly to match Supabase database schema
 interface Asset {
   id: string;
   symbol: string;
@@ -12,54 +11,108 @@ interface Asset {
 }
 
 const App: React.FC = () => {
-  const [userId, setUserId] = useState<string | null>(null);
+  // FIX ISSUE #2: Initialize from localStorage so refresh doesn't log you out
+  const [userId, setUserId] = useState<string | null>(() => {
+    return localStorage.getItem('portfolio_user_id');
+  });
+  
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [livePrices, setLivePrices] = useState<Record<string, number>>({});
 
-  // Modal States
+  // UI State Controls
   const [modalMode, setModalMode] = useState<'ADD' | null>(null);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  
+  // Form States
   const [formSymbol, setFormSymbol] = useState('');
   const [formUnits, setFormUnits] = useState('');
   const [formPrice, setFormPrice] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Settings Password Form States
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
   const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
 
-  // TRIGGER: Fetch live Postgres data the moment userId sets
+  // FIX ISSUE #2: Sync userId changes to localStorage
+  useEffect(() => {
+    if (userId) {
+      localStorage.setItem('portfolio_user_id', userId);
+    } else {
+      localStorage.removeItem('portfolio_user_id');
+    }
+  }, [userId]);
+
+  const refreshMarketPrices = async (symbolList: string[]) => {
+    if (symbolList.length === 0) return;
+    try {
+      const freshPrices = await api.getPriceSnapshot(symbolList);
+      setLivePrices(freshPrices);
+    } catch (err) {
+      console.error("Snapshot engine failed:", err);
+    }
+  };
+
   useEffect(() => {
     if (!userId) return;
-
-    const loadData = async () => {
+    const init = async () => {
       try {
         const data = await api.getAssets(userId);
         setAssets(data);
+        const symbols = data.map((a: any) => a.symbol);
+        await refreshMarketPrices(symbols);
       } catch (err) {
-        console.error("FastAPI connection failed:", err);
+        console.error("Backend connection failed:", err);
       }
     };
-
-    loadData();
+    init();
   }, [userId]);
 
-  // ACTION: Save to Supabase via FastAPI
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userId) return;
 
     const uNum = parseFloat(formUnits) || 0;
     const pNum = parseFloat(formPrice) || 0;
+    setIsSaving(true); // FIX ISSUE #4: Loading indicator state
 
     try {
       const savedRows = await api.addAsset(userId, formSymbol, uNum, pNum);
-      // Supabase returns an array of inserted objects; take the first one
       const newRow = savedRows[0]; 
-      setAssets([...assets, newRow]);
+      const updatedList = [...assets, newRow];
+      
+      setAssets(updatedList);
       setModalMode(null);
+
+      const allSymbols = updatedList.map(a => a.symbol);
+      await refreshMarketPrices(allSymbols);
     } catch (err) {
-      alert("Failed to save to database!");
+      alert("Failed to save asset!");
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  // ACTION: Delete from Supabase via FastAPI
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmNewPassword) {
+      alert("Passwords do not match!");
+      return;
+    }
+    try {
+      await api.updatePassword(userId!, newPassword);
+      alert("Password updated successfully!");
+      setShowSettings(false);
+      setNewPassword('');
+      setConfirmNewPassword('');
+    } catch (err) {
+      alert("Failed to update password.");
+    }
+  };
+
   const handleDelete = async (id: string, symbol: string) => {
     if (!userId) return;
     if (!window.confirm(`Delete ${symbol}?`)) return;
@@ -68,13 +121,16 @@ const App: React.FC = () => {
       await api.deleteAsset(userId, id);
       setAssets(assets.filter(a => a.id !== id));
     } catch (err) {
-      alert("Failed to delete from database!");
+      alert("Failed to delete asset!");
     }
   };
 
   const totalInvested = assets.reduce((sum, a) => sum + (a.units * a.avg_price), 0);
-  const totalCurrentValue = assets.reduce((sum, a) => sum + (a.units * a.avg_price), 0);
-  
+  const totalCurrentValue = assets.reduce((sum, a) => {
+    const marketPrice = livePrices[a.symbol.toUpperCase()] || a.avg_price;
+    return sum + (a.units * marketPrice);
+  }, 0);
+
   const overallProfit = totalCurrentValue - totalInvested;
   const isOverallPositive = overallProfit >= 0;
 
@@ -100,8 +156,19 @@ const App: React.FC = () => {
           <button className="btn btn-red-action" onClick={() => { setFormSymbol(''); setFormUnits(''); setFormPrice(''); setModalMode('ADD'); }}>
             + Add Asset
           </button>
-          <span className="user-greeting">Hello, Joem</span>
-          <button className="btn btn-logout" onClick={() => setUserId(null)}>Logout</button>
+          
+          {/* FIX ISSUE #3: Dropdown Button Integration */}
+          <div className="dropdown-container" style={{ position: 'relative' }}>
+            <button className="btn btn-dropdown" onClick={() => setDropdownOpen(!dropdownOpen)}>
+              Hello, Joem ▼
+            </button>
+            {dropdownOpen && (
+              <div className="dropdown-menu-box" style={{ position: 'absolute', right: 0, top: '100%', zIndex: 1000 }}>
+                <button onClick={() => { setShowSettings(true); setDropdownOpen(false); }}>Settings</button>
+                <button onClick={() => { setUserId(null); setDropdownOpen(false); }}>Logout</button>
+              </div>
+            )}
+          </div>
         </div>
       </nav>
 
@@ -112,21 +179,23 @@ const App: React.FC = () => {
             <p style={{ color: 'var(--text-muted)', marginTop: '1rem' }}>No assets found in database. Add one above!</p>
           ) : (
             assets.map((asset) => {
-              const currentP = asset.avg_price;
-              const profit = (currentP - asset.avg_price) * asset.units;
-              const isPositive = profit >= 0;
+              const sym = asset.symbol.toUpperCase();
+              const marketP = livePrices[sym] || asset.avg_price;
+              const livePositionValue = asset.units * marketP;
+              const cardProfit = livePositionValue - (asset.units * asset.avg_price);
+              const isCardPositive = cardProfit >= 0;
 
               return (
                 <div key={asset.id} className="asset-card">
                   <div className="asset-info">
-                    <h3>{asset.symbol.toUpperCase()}</h3>
+                    <h3>{sym}</h3>
                     <p>{asset.units} units @ ${asset.avg_price}</p>
                   </div>
                   <div className="asset-card-right">
                     <div className="asset-price">
-                      <p className="current-text">Value: ${currentP.toFixed(2)}</p>
-                      <h4 className={isPositive ? 'text-green' : 'text-red'}>
-                        {isPositive ? '+' : ''}{profit.toFixed(2)}
+                      <p className="current-text">Value: ${livePositionValue.toFixed(2)}</p>
+                      <h4 className={isCardPositive ? 'text-green' : 'text-red'}>
+                        {isCardPositive ? '+' : ''}{cardProfit.toFixed(2)}
                       </h4>
                     </div>
                     <div className="card-crud-buttons">
@@ -158,6 +227,7 @@ const App: React.FC = () => {
         </aside>
       </div>
 
+      {/* ADD ASSET MODAL */}
       {modalMode && (
         <div className="modal-backdrop">
           <div className="modal-box">
@@ -177,7 +247,33 @@ const App: React.FC = () => {
               </div>
               <div className="modal-actions">
                 <button type="button" className="btn btn-cancel" onClick={() => setModalMode(null)}>Cancel</button>
-                <button type="submit" className="btn btn-red-action">Save to Supabase</button>
+                {/* FIX ISSUE #4: Cleaner action text */}
+                <button type="submit" className="btn btn-red-action" disabled={isSaving}>
+                  {isSaving ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* FIX ISSUE #3: SETTINGS MODAL */}
+      {showSettings && (
+        <div className="modal-backdrop">
+          <div className="modal-box">
+            <h3>Account Settings</h3>
+            <form onSubmit={handlePasswordChange}>
+              <div className="form-group">
+                <label>New Password</label>
+                <input type="password" placeholder="Enter new password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
+              </div>
+              <div className="form-group">
+                <label>Confirm New Password</label>
+                <input type="password" placeholder="Confirm new password" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} required />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-cancel" onClick={() => setShowSettings(false)}>Cancel</button>
+                <button type="submit" className="btn btn-red-action">Update Password</button>
               </div>
             </form>
           </div>
