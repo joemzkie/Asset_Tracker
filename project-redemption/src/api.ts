@@ -1,4 +1,9 @@
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+// api.ts
+
+// FIX: Hardcoded logic bypasses Vercel's .env dashboard completely.
+const BASE_URL = import.meta.env.MODE === "production" 
+  ? "https://asset-tracker-bhgo.onrender.com/api" 
+  : "http://localhost:8000/api";
 
 export const api = {
   getAssets: async (user_id: string) => {
@@ -18,8 +23,6 @@ export const api = {
   },
 
   deleteAsset: async (user_id: string, asset_id: string) => {
-    // We added ?user_id=${user_id} to the URL strictly to make the TypeScript compiler shut up. 
-    // The backend will safely ignore it.
     const res = await fetch(`${BASE_URL}/assets/${asset_id}?user_id=${user_id}`, {
       method: "DELETE",
     });
@@ -35,7 +38,7 @@ export const api = {
     });
     if (!res.ok) throw new Error("Failed to fetch price snapshot");
     return res.json();
-  }, // <--- FIXED: Added this comma to separate the object properties
+  },
 
   updatePassword: async (user_id: string, new_password: string) => {
     const res = await fetch(`${BASE_URL}/auth/update-password`, {
