@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Login from './Login';
 import { api } from './api';
+import { supabase } from './supabase'; // <-- Double check this path matches your project structure!
 import './App.css';
 
 interface Asset {
@@ -11,11 +12,14 @@ interface Asset {
 }
 
 const App: React.FC = () => {
-  // FIX ISSUE #2: Initialize from localStorage so refresh doesn't log you out
   const [userId, setUserId] = useState<string | null>(() => {
     return localStorage.getItem('portfolio_user_id');
   });
-  
+
+  // Dynamic Profile States
+  const [username, setUsername] = useState<string>("User");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [assets, setAssets] = useState<Asset[]>([]);
   const [livePrices, setLivePrices] = useState<Record<string, number>>({});
@@ -24,7 +28,7 @@ const App: React.FC = () => {
   const [modalMode, setModalMode] = useState<'ADD' | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  
+
   // Form States
   const [formSymbol, setFormSymbol] = useState('');
   const [formUnits, setFormUnits] = useState('');
@@ -37,13 +41,36 @@ const App: React.FC = () => {
 
   const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
 
-  // FIX ISSUE #2: Sync userId changes to localStorage
   useEffect(() => {
     if (userId) {
       localStorage.setItem('portfolio_user_id', userId);
     } else {
       localStorage.removeItem('portfolio_user_id');
     }
+  }, [userId]);
+
+  // Fetch Username & Photo from Supabase Profiles Table
+  useEffect(() => {
+    if (!userId) return;
+
+    const fetchProfile = async () => {
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('username, avatar_url')
+          .eq('id', userId)
+          .single();
+
+        if (data) {
+          if (data.username) setUsername(data.username);
+          if (data.avatar_url) setAvatarUrl(data.avatar_url);
+        }
+      } catch (err) {
+        console.error("Failed to load user profile:", err);
+      }
+    };
+
+    fetchProfile();
   }, [userId]);
 
   const refreshMarketPrices = async (symbolList: string[]) => {
@@ -77,13 +104,13 @@ const App: React.FC = () => {
 
     const uNum = parseFloat(formUnits) || 0;
     const pNum = parseFloat(formPrice) || 0;
-    setIsSaving(true); // FIX ISSUE #4: Loading indicator state
+    setIsSaving(true);
 
     try {
       const savedRows = await api.addAsset(userId, formSymbol, uNum, pNum);
-      const newRow = savedRows[0]; 
+      const newRow = savedRows[0];
       const updatedList = [...assets, newRow];
-      
+
       setAssets(updatedList);
       setModalMode(null);
 
@@ -156,12 +183,24 @@ const App: React.FC = () => {
           <button className="btn btn-red-action" onClick={() => { setFormSymbol(''); setFormUnits(''); setFormPrice(''); setModalMode('ADD'); }}>
             + Add Asset
           </button>
-          
-          {/* FIX ISSUE #3: Dropdown Button Integration */}
+
+          {/* Dynamic Profile Dropdown Button */}
           <div className="dropdown-container" style={{ position: 'relative' }}>
-            <button className="btn btn-dropdown" onClick={() => setDropdownOpen(!dropdownOpen)}>
-            ▼
+            <button 
+              className="btn btn-dropdown" 
+              onClick={() => setDropdownOpen(!dropdownOpen)}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              {avatarUrl && (
+                <img 
+                  src={avatarUrl} 
+                  alt="Profile" 
+                  style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover' }}
+                />
+              )}
+              Hello, {username} ▼
             </button>
+
             {dropdownOpen && (
               <div className="dropdown-menu-box" style={{ position: 'absolute', right: 0, top: '100%', zIndex: 1000 }}>
                 <button onClick={() => { setShowSettings(true); setDropdownOpen(false); }}>Settings</button>
@@ -247,7 +286,6 @@ const App: React.FC = () => {
               </div>
               <div className="modal-actions">
                 <button type="button" className="btn btn-cancel" onClick={() => setModalMode(null)}>Cancel</button>
-                {/* FIX ISSUE #4: Cleaner action text */}
                 <button type="submit" className="btn btn-red-action" disabled={isSaving}>
                   {isSaving ? "Saving..." : "Save"}
                 </button>
@@ -257,7 +295,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* FIX ISSUE #3: SETTINGS MODAL */}
+      {/* SETTINGS MODAL */}
       {showSettings && (
         <div className="modal-backdrop">
           <div className="modal-box">
