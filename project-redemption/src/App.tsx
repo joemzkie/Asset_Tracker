@@ -160,7 +160,7 @@ const App: React.FC = () => {
           {/* FIX ISSUE #3: Dropdown Button Integration */}
           <div className="dropdown-container" style={{ position: 'relative' }}>
             <button className="btn btn-dropdown" onClick={() => setDropdownOpen(!dropdownOpen)}>
-              Hello, Joem ▼
+            ▼
             </button>
             {dropdownOpen && (
               <div className="dropdown-menu-box" style={{ position: 'absolute', right: 0, top: '100%', zIndex: 1000 }}>
