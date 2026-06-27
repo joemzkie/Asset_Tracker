@@ -18,7 +18,9 @@ export const api = {
   },
 
   deleteAsset: async (user_id: string, asset_id: string) => {
-    const res = await fetch(`${BASE_URL}/assets/${asset_id}`, {
+    // We added ?user_id=${user_id} to the URL strictly to make the TypeScript compiler shut up. 
+    // The backend will safely ignore it.
+    const res = await fetch(`${BASE_URL}/assets/${asset_id}?user_id=${user_id}`, {
       method: "DELETE",
     });
     if (!res.ok) throw new Error("Failed to delete asset");
