@@ -39,6 +39,9 @@ const App: React.FC = () => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
+  // Loading State for Render's cold boot
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
   const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
 
   useEffect(() => {
@@ -83,9 +86,11 @@ const App: React.FC = () => {
     }
   };
 
+  // INITIALIZE ASSETS & PRICES
   useEffect(() => {
     if (!userId) return;
     const init = async () => {
+      setIsInitialLoad(true); // Trigger loading screen
       try {
         const data = await api.getAssets(userId);
         setAssets(data);
@@ -93,6 +98,8 @@ const App: React.FC = () => {
         await refreshMarketPrices(symbols);
       } catch (err) {
         console.error("Backend connection failed:", err);
+      } finally {
+        setIsInitialLoad(false); // Turn off loading screen when done or failed
       }
     };
     init();
@@ -212,40 +219,48 @@ const App: React.FC = () => {
       </nav>
 
       <div className="dashboard-body">
-        <main className="asset-list">
-          <h2>Your Portfolio</h2>
-          {assets.length === 0 ? (
-            <p style={{ color: 'var(--text-muted)', marginTop: '1rem' }}>No assets found in database. Add one above!</p>
-          ) : (
-            assets.map((asset) => {
-              const sym = asset.symbol.toUpperCase();
-              const marketP = livePrices[sym] || asset.avg_price;
-              const livePositionValue = asset.units * marketP;
-              const cardProfit = livePositionValue - (asset.units * asset.avg_price);
-              const isCardPositive = cardProfit >= 0;
+        {/* CONDITIONAL UI: SHOW LOADING OR ASSET LIST */}
+        {isInitialLoad ? (
+          <main className="asset-list" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px' }}>
+            <h2 style={{ color: 'var(--text-muted)' }}>Waking up database...</h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>(This may take up to 50 seconds on the initial load)</p>
+          </main>
+        ) : (
+          <main className="asset-list">
+            <h2>Your Portfolio</h2>
+            {assets.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', marginTop: '1rem' }}>No assets found in database. Add one above!</p>
+            ) : (
+              assets.map((asset) => {
+                const sym = asset.symbol.toUpperCase();
+                const marketP = livePrices[sym] || asset.avg_price;
+                const livePositionValue = asset.units * marketP;
+                const cardProfit = livePositionValue - (asset.units * asset.avg_price);
+                const isCardPositive = cardProfit >= 0;
 
-              return (
-                <div key={asset.id} className="asset-card">
-                  <div className="asset-info">
-                    <h3>{sym}</h3>
-                    <p>{asset.units} units @ ${asset.avg_price}</p>
-                  </div>
-                  <div className="asset-card-right">
-                    <div className="asset-price">
-                      <p className="current-text">Value: ${livePositionValue.toFixed(2)}</p>
-                      <h4 className={isCardPositive ? 'text-green' : 'text-red'}>
-                        {isCardPositive ? '+' : ''}{cardProfit.toFixed(2)}
-                      </h4>
+                return (
+                  <div key={asset.id} className="asset-card">
+                    <div className="asset-info">
+                      <h3>{sym}</h3>
+                      <p>{asset.units} units @ ${asset.avg_price}</p>
                     </div>
-                    <div className="card-crud-buttons">
-                      <button className="btn-icon delete" onClick={() => handleDelete(asset.id, asset.symbol)}>Del</button>
+                    <div className="asset-card-right">
+                      <div className="asset-price">
+                        <p className="current-text">Value: ${livePositionValue.toFixed(2)}</p>
+                        <h4 className={isCardPositive ? 'text-green' : 'text-red'}>
+                          {isCardPositive ? '+' : ''}{cardProfit.toFixed(2)}
+                        </h4>
+                      </div>
+                      <div className="card-crud-buttons">
+                        <button className="btn-icon delete" onClick={() => handleDelete(asset.id, asset.symbol)}>Del</button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })
-          )}
-        </main>
+                );
+              })
+            )}
+          </main>
+        )}
 
         <aside className="summary-sidebar">
           <h2>Summary</h2>
