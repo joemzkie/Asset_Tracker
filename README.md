@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="https://asset-tracker-sable-beta.vercel.app/">
-    <img src="https://via.placeholder.com/900x400/111111/ffffff?text=Drop+Your+App+Banner+or+Demo+GIF+Here" alt="Asset Tracker Preview Banner" width="90%">
+    <img src="Asset-Tracker-Screenshot.png" alt="Asset Tracker Preview Banner" width="90%">
   </a>
 </p>
 
