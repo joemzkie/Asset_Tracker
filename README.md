@@ -53,7 +53,7 @@ Built with a **React + TypeScript** frontend, the UI guarantees end-to-end type 
 
 ### **Backend (API)**
 * **Framework:** FastAPI
-* **Language:** Python 3.x
+* **Language:** Python 3.14
 * **API Documentation:** Swagger UI / ReDoc (built into FastAPI)
 * **Deployment:** [Render](https://render.com/)
 
