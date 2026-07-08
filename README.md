@@ -1,5 +1,3 @@
-LINK: https://asset-tracker-sable-beta.vercel.app/
-
 <div align="center">
 
 # 📊 Asset Tracker
